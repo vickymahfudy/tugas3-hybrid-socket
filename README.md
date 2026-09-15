@@ -3,7 +3,7 @@
 Mata Kuliah: Jaringan Komputer Lanjut (S2 Ilmu Komputer)
 
 Repo ini memuat source code sekaligus laporan analisis Tugas 3. README ini
-adalah laporan analisis lengkap (bukan file PDF terpisah): source code di
+adalah laporan analisis lengkap : source code di
 `Kode/`, jawaban Bagian A (implementasi) dan Bagian B (analisis) ada di
 bawah, lengkap dengan bukti tangkapan layar Wireshark dan terminal.
 
@@ -204,7 +204,106 @@ pengumpulan tugas.)*
 
 ### Bagian A.2: Layanan UDP Pinger (Bobot 20%)
 
-*(Akan diisi setelah demo dan bukti tangkapan layar diambil.)*
+#### Kode Client UDP dengan settimeout(1.0)
+
+Diambil dari `Kode/UDPPingerClient.py`:
+
+```python
+clientSocket = socket(AF_INET, SOCK_DGRAM)
+
+# Give up waiting for a reply after 1 second: this is the client-side
+# defense against unreliable packet delivery required by the brief.
+clientSocket.settimeout(1.0)
+
+NUM_PINGS = 10
+rtt_list = []
+lost_count = 0
+
+for sequence_number in range(1, NUM_PINGS + 1):
+    sendTime = time.time()
+    message = f'Ping {sequence_number} {sendTime}'
+
+    try:
+        startTime = time.time()
+        clientSocket.sendto(message.encode(), (serverName, serverPort))
+
+        rttMessage, serverAddress = clientSocket.recvfrom(1024)
+        endTime = time.time()
+
+        rtt = endTime - startTime
+        rtt_list.append(rtt)
+        print(f'Reply from {serverAddress}: {rttMessage.decode()!r}, '
+              f'RTT = {rtt:.6f} s')
+    except timeout:
+        lost_count += 1
+        print(f'Ping {sequence_number}: Request timed out (no reply within 1.0 s)')
+```
+
+Karena UDP tidak menjamin pengiriman, balasan dari server bisa saja tidak
+pernah datang (baik karena request atau reply-nya hilang). `settimeout(1.0)`
+memastikan `recvfrom()` tidak menunggu selamanya: kalau tidak ada balasan
+dalam 1 detik, exception `timeout` ditangkap, ping tersebut dihitung sebagai
+paket hilang, dan loop lanjut ke ping berikutnya. Di akhir 10 kali kirim,
+client menghitung RTT minimum, rata-rata, maksimum (dari ping yang berhasil)
+serta packet loss rate.
+
+Untuk mendemonstrasikan penanganan packet loss secara nyata,
+`UDPPingerServer.py` sengaja men-drop sekitar 30% ping yang masuk secara
+acak (tidak membalas sama sekali), sehingga client benar-benar mengalami
+timeout pada sebagian ping.
+
+#### Hasil Uji Coba
+
+Log server (`UDPPingerServer.py`):
+
+```
+UDP ping server ready, listening on port 12000...
+Simulated loss: dropped ping from ('127.0.0.1', 64006): 'Ping 1 1789447772.172032'
+Simulated loss: dropped ping from ('127.0.0.1', 64006): 'Ping 2 1789447773.184542'
+Received ping from ('127.0.0.1', 64006): 'Ping 3 1789447774.18665'
+Received ping from ('127.0.0.1', 64006): 'Ping 4 1789447774.187785'
+Received ping from ('127.0.0.1', 64006): 'Ping 5 1789447774.1883678'
+Received ping from ('127.0.0.1', 64006): 'Ping 6 1789447774.1891909'
+Received ping from ('127.0.0.1', 64006): 'Ping 7 1789447774.190277'
+Received ping from ('127.0.0.1', 64006): 'Ping 8 1789447774.190725'
+Received ping from ('127.0.0.1', 64006): 'Ping 9 1789447774.191124'
+Simulated loss: dropped ping from ('127.0.0.1', 64006): 'Ping 10 1789447774.191492'
+```
+
+Log client (`UDPPingerClient.py`):
+
+```
+Ping 1: Request timed out (no reply within 1.0 s)
+Ping 2: Request timed out (no reply within 1.0 s)
+Reply from ('127.0.0.1', 12000): 'Ping 3 1789447774.18665', RTT = 0.000991 s
+Reply from ('127.0.0.1', 12000): 'Ping 4 1789447774.187785', RTT = 0.000551 s
+Reply from ('127.0.0.1', 12000): 'Ping 5 1789447774.1883678', RTT = 0.000559 s
+Reply from ('127.0.0.1', 12000): 'Ping 6 1789447774.1891909', RTT = 0.001042 s
+Reply from ('127.0.0.1', 12000): 'Ping 7 1789447774.190277', RTT = 0.000411 s
+Reply from ('127.0.0.1', 12000): 'Ping 8 1789447774.190725', RTT = 0.000354 s
+Reply from ('127.0.0.1', 12000): 'Ping 9 1789447774.191124', RTT = 0.000343 s
+Ping 10: Request timed out (no reply within 1.0 s)
+
+--- Ping statistics ---
+10 packets transmitted, 7 received, 30.0% packet loss
+Minimum RTT = 0.000343 s
+Average RTT = 0.000607 s
+Maximum RTT = 0.001042 s
+```
+
+Ping 1, 2, dan 10 di-drop oleh server sehingga client mengalami timeout
+tepat pada ketiga ping tersebut, sedangkan ping 3-9 berhasil dibalas dengan
+RTT di kisaran sub-milidetik (wajar untuk komunikasi loopback). Hasil ini
+konsisten satu sama lain antara log server dan log client, membuktikan
+mekanisme timeout dan penghitungan RTT/packet loss di sisi client bekerja
+sesuai spesifikasi.
+
+*(Bukti tangkapan layar packet capture Wireshark untuk sesi UDP ini tidak
+disertakan: pada environment pengujian, Wireshark salah mendekode sebagian
+trafik loopback sebagai frame LLC alih-alih UDP, sebuah isu dekode yang
+diketahui terjadi pada beberapa versi macOS. Bukti fungsional yang
+disertakan berupa log terminal server dan client di atas, yang saling
+berkorespondensi satu sama lain per nomor ping.)*
 
 ### Bagian B.1: Byte-Stream vs Message Boundary (Bobot 15%)
 
