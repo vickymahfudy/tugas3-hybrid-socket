@@ -199,8 +199,7 @@ yang berbeda, semuanya menuju port 12000 yang sama, mengonfirmasi bahwa
 welcoming socket di port 12000 tetap satu sementara tiap client mendapat
 connection socket sendiri.
 
-*(Screenshot bukti: lihat lampiran gambar yang disertakan terpisah saat
-pengumpulan tugas.)*
+![Bukti konkurensi TCP multi-client: 3 client (A, B, C) terhubung bersamaan, terlihat dari log server dan tiga three-way handshake terpisah di Wireshark](screenshots/a1-tcp-multiclient.png)
 
 ### Bagian A.2: Layanan UDP Pinger (Bobot 20%)
 
@@ -298,12 +297,7 @@ konsisten satu sama lain antara log server dan log client, membuktikan
 mekanisme timeout dan penghitungan RTT/packet loss di sisi client bekerja
 sesuai spesifikasi.
 
-*(Bukti tangkapan layar packet capture Wireshark untuk sesi UDP ini tidak
-disertakan: pada environment pengujian, Wireshark salah mendekode sebagian
-trafik loopback sebagai frame LLC alih-alih UDP, sebuah isu dekode yang
-diketahui terjadi pada beberapa versi macOS. Bukti fungsional yang
-disertakan berupa log terminal server dan client di atas, yang saling
-berkorespondensi satu sama lain per nomor ping.)*
+![Bukti UDP Pinger: log server/client dan packet capture Wireshark yang menunjukkan datagram UDP request/reply pada port 12000 (kolom Protocol pada Wireshark menampilkan "LLC" akibat salah label dissector macOS, namun panel detail paket mengonfirmasi header UDP asli dengan Src Port dan Dst Port 12000 yang sesuai)](screenshots/a2-udp-pinger.png)
 
 ### Bagian B.1: Byte-Stream vs Message Boundary (Bobot 15%)
 
@@ -358,6 +352,8 @@ Sent (no delay): Pesan kedua
 Sent (no delay): Pesan ketiga
 Connection closed.
 ```
+
+![Bukti byte-stream boundary: 3 pesan dikirim tanpa delay via demo3, log server memisahkannya dengan benar sedangkan Wireshark menunjukkan hanya 2 segmen TCP di kabel](screenshots/b1-tcp-demo3-boundary.png)
 
 Wireshark capture pada `lo0` menunjukkan hanya **2 segmen data** yang
 terkirim di kabel, bukan 3:
