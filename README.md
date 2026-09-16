@@ -106,6 +106,30 @@ saling menyusul sebelum satu pun disconnect, dan Wireshark menunjukkan
 tiga three-way handshake terpisah dari tiga port ephemeral berbeda,
 semuanya menuju port 12000 yang sama.
 
+Potongan kode welcoming socket dan accept() (`Kode/TCPServer.py`):
+
+```python
+def main():
+    serverSocket = socket(AF_INET, SOCK_STREAM)
+    serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
+    serverSocket.bind(('', SERVER_PORT))
+    serverSocket.listen(5)
+
+    print(f'TCP hybrid server ready, listening on port {SERVER_PORT}...')
+
+    while True:
+        # The welcoming socket's only job: block until a new client shows
+        # up, then hand off the resulting connection socket to a worker
+        # thread and immediately go back to listening for the next one.
+        connectionSocket, addr = serverSocket.accept()
+        clientThread = threading.Thread(
+            target=handle_client,
+            args=(connectionSocket, addr),
+            daemon=True
+        )
+        clientThread.start()
+```
+
 ![Bukti konkurensi TCP multi-client: 3 client terhubung bersamaan, log server dan tiga three-way handshake terpisah di Wireshark](screenshots/a1-tcp-multiclient.png)
 
 #### A.2 Layanan UDP Pinger
@@ -122,6 +146,40 @@ ping yang masuk secara acak.
 Hasil uji: ping 1, 2, dan 10 di-drop server sehingga client timeout tepat
 pada ketiganya; ping 3-9 berhasil dibalas dengan RTT sub-milidetik.
 Statistik akhir: 10 transmitted, 7 received, 30% packet loss.
+
+Potongan kode client UDP dengan `settimeout(1.0)` dan penanganan paket
+hilang (`Kode/UDPPingerClient.py`):
+
+```python
+clientSocket = socket(AF_INET, SOCK_DGRAM)
+
+# Give up waiting for a reply after 1 second: this is the client-side
+# defense against unreliable packet delivery required by the brief.
+clientSocket.settimeout(1.0)
+
+NUM_PINGS = 10
+rtt_list = []
+lost_count = 0
+
+for sequence_number in range(1, NUM_PINGS + 1):
+    sendTime = time.time()
+    message = f'Ping {sequence_number} {sendTime}'
+
+    try:
+        startTime = time.time()
+        clientSocket.sendto(message.encode(), (serverName, serverPort))
+
+        rttMessage, serverAddress = clientSocket.recvfrom(1024)
+        endTime = time.time()
+
+        rtt = endTime - startTime
+        rtt_list.append(rtt)
+        print(f'Reply from {serverAddress}: {rttMessage.decode()!r}, '
+              f'RTT = {rtt:.6f} s')
+    except timeout:
+        lost_count += 1
+        print(f'Ping {sequence_number}: Request timed out (no reply within 1.0 s)')
+```
 
 ![Bukti UDP Pinger: log server/client dan packet capture Wireshark datagram UDP request/reply pada port 12000](screenshots/a2-udp-pinger.png)
 
